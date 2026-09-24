@@ -1,6 +1,6 @@
 # RF Tools
 
-Humble beginings as tool to process IQdata sampled from HackRF One.  Hoping it can be applied to Rohde&Schwarz which appears to be a powerful device, but accessible through toy applications.
+Humble beginings as tool to process IQdata sampled from HackRF One.  Hoping it can be applied to Rohde&Schwarz which appears to be a powerful device, but accessible through slightly inflexible applications.
 
 Example HackRF usage:
 ```
