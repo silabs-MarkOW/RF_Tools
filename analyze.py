@@ -5,11 +5,39 @@ import argparse
 import os
 import time
 
+class Plot :
+    def __init__(self) :
+        self.fig, self.ax = plt.subplots()
+        self.cid = self.fig.canvas.mpl_connect('button_release_event', self.on_release)
+        self.xLimits = None
+        backend_toolbar = self.fig.canvas.manager.toolbar
+        if backend_toolbar is not None:
+            backend_toolbar.zoom()  # Activates the zoom tool automatically
+
+    def on_release(self,event) :
+        self.xLimits = plt.xlim()
+        print(self.xLimits)
+    def xlim(self) :
+        return self.xLimits
+    def plot(self, x, y) :
+        self.ax.plot(x, y)
+    def scatter(self,x,y,c) :
+        self.ax.scatter(x,y,c=c,cmap='Greys',s=9)
+    def set_xlabel(self, label) :
+        self.ax.set_xlabel(label)
+    def set_ylabel(self, label) :
+        self.ax.set_ylabel(label)
+    def show(self) :
+        self.xLimits = plt.xlim()
+        plt.show()
+
 p = argparse.ArgumentParser()
 p.add_argument('--iq',required=True)
 p.add_argument('--f-sample',type=float,required=True)
-p.add_argument('--amp',action='store_true')
+p.add_argument('--amp')
+p.add_argument('--phase')
 p.add_argument('--sine',action='store_true')
+p.add_argument('--fft',action='store_true')
 p.add_argument('--left')
 p.add_argument('--right')
 p.add_argument('--preamble')
@@ -33,13 +61,68 @@ p2length = 1 << int(numpy.floor(numpy.log2(length)))
 samples = folded[:,0] + 1.0j*folded[:,1]
 print('%d samples (%f -> %d)'%(length,numpy.log2(length),p2length))
 
-dangle = numpy.angle(samples[args.N:]*numpy.conj(samples[:-args.N]))
-
-print(dangle[:10])
-print(dangle.min(),dangle.max(),dangle.mean(),dangle.std())
-
 amp = numpy.abs(samples)
-print('Amplitude: %.1f - %.1f'%(amp.min(),amp.max()))
+dangle = numpy.angle(samples[args.N:]*numpy.conj(samples[:-args.N]))/args.N
+seconds = numpy.linspace(0,len(dangle)/args.f_sample,len(dangle))
+kHz = dangle * args.f_sample / 2e3 / numpy.pi
+
+if None == args.phase :
+    if None == args.amp :
+        ms = numpy.linspace(0,1e6*len(amp)/args.f_sample,len(amp))
+        p = Plot()
+        p.plot(ms,amp)
+        p.set_xlabel('Time (ms)')
+        p.set_ylabel('Amplitude')
+        p.show()
+        L,R = p.xlim()
+        L = (ms < L).sum()
+        R = (ms <= R).sum()
+        print('--amp=%d,%d'%(L,R))
+    else :
+        t = args.amp.split(',')
+        L = int(t[0])
+        R = int(t[1])
+    ms = numpy.linspace(0,1e3*len(kHz)/args.f_sample,len(kHz))
+    camp = numpy.zeros((R-L))
+    for i in range(args.N) :
+        j = i - (args.N >> 1)
+        camp += amp[L+j:R+j]
+    camp /= args.N
+    p = Plot()
+    p.scatter(ms[L:R],kHz[L:R],camp)
+    p.set_xlabel('Time (ms)')
+    p.set_ylabel('Modulation (kHz)')
+    p.show()
+    L,R = p.xlim()
+    L = (ms < L).sum()
+    R = (ms <= R).sum()
+    print('--phase=%d,%d'%(L,R))
+else :
+    t = args.phase.split(',')
+    L = int(t[0])
+    R = int(t[1])
+
+    
+if args.fft :
+    bits = int(numpy.floor(numpy.log2(R-L)))
+    fftlength = 1 << bits
+    L = (L+R - fftlength) >> 1
+    R = L + fftlength
+    frequency = numpy.linspace(-args.f_sample/2, args.f_sample/2, fftlength+1, endpoint=True)
+    print(frequency[0],frequency[-1])
+    fft = numpy.fft.fft(samples[L:R])
+    spectrum = numpy.abs(numpy.concat((fft[(fftlength>>1):],fft[0:(fftlength>>1)+1])))
+    p = Plot()
+    p.plot(frequency/1000, spectrum)
+    p.set_xlabel('Frequency (kHz)')
+    p.set_ylabel('Amplitude')
+    p.show()
+    df = (frequency[1:]-frequency[:-1]).mean()
+    A = spectrum.sum()*df
+    mean = (spectrum*frequency).sum()/spectrum.sum()
+    print('A: %f\nmean: %f'%(A,mean))
+    quit()
+    
 
 count,edges = numpy.histogram(amp,100)
 
@@ -61,9 +144,10 @@ def on_release(event) :
     
 if None == args.left or None == args.right :
     ms = numpy.linspace(0,length/args.f_sample*1e3,length)
+    kHz = dangle * args.f_sample / 2e3 / numpy.pi
     fig, ax = plt.subplots()
     cid = fig.canvas.mpl_connect('button_release_event', on_release)
-    ax.plot(ms,amp)
+    ax.plot(ms,kHz)
     ax.set_xlabel('time (ms)')
     ax.set_ylabel('Amplitude (8-bit (complex sample)')
     plt.show()
