@@ -130,32 +130,39 @@ if None == args.preamble :
     camp /= args.N
     us = seconds*1e6
     p = Plot()
-    p.scatter(us[L:R]-Lus, kHz[L:R], camp)
+    p.scatter(us[L:R]-us[L], kHz[L:R], camp)
     p.set_xlabel('time (us)')
     p.set_ylabel('frequency deviation (kHz)')
     p.show()
     Lp,Rp = p.xlim()
-    Lp = int(us[L] + (us < Lp).sum())
-    Rp = int(us[L] + (us >= Rp).sum())
+    print('L,us[L],Lp,Rp',L,us[L],Lp,Rp)
+    Lp = (us < (us[L] + Lp)).nonzero()[0][-1]
+    Rp = (us <= (us[L] + Rp)).nonzero()[0][-1]
     mid = (Lp+Rp)>>1
     Lp = int(mid - 4e-6*args.f_sample)
     print('auto:\n--preamble=%d'%(Lp))
 else :
     Lp = int(args.preamble)
 Rp = int(Lp + 8e-6*args.f_sample)
-print('Lp,Rp',Lp,Rp)
+print('Lp,Rp,Rp-Lp',Lp,Rp,Rp-Lp)
 preamble = kHz[Lp:Rp]
-sine = numpy.sin(numpy.pi*seconds[Lp:Rp])
-cosine = numpy.cos(numpy.pi*seconds[Lp:Rp])
+offset = preamble.mean()
+sine = numpy.sin(2*numpy.pi*seconds[Lp:Rp]*500e3)
+cosine = numpy.cos(2*numpy.pi*seconds[Lp:Rp]*500e3)
+#plt.plot(seconds[Lp:Rp],100*sine+offset)
+#plt.plot(seconds[Lp:Rp],100*cosine+offset)
+#plt.scatter(seconds[Lp:Rp],preamble,s=3)
+#plt.show()
 c_sine = (sine*preamble).mean()
 c_cosine = (cosine*preamble).mean()
 components = c_sine - 1.j*c_cosine
 phase = numpy.angle(components)
-offset = preamble.mean()
 depth = 2*numpy.abs(components)
+#plt.plot(seconds[Lp:Rp],100*numpy.sin(2*numpy.pi*seconds[Lp:Rp]*500e3-phase))
+#plt.show()
 print('phase,offset,depth',phase,offset,depth)
 print('L,R,R-L,L/20',L,R,R-L,L/20)
-L = int(20*numpy.round(L/20))
+L = int(20*numpy.round(Lp/20))
 L -= int(numpy.round(20*phase/2/numpy.pi))
 symbols = (R - L) // 20
 print('L,symbols',L,symbols)
@@ -176,10 +183,10 @@ for i in range(len(bits)) :
     weight = 1 << (i % 8)
     if bits[i] :
         octet += weight
-    print('%f %d'%(t,bits[i]))
-    p.text(t,offset/1e3,'%d'%(bits[i]))
+    #print('%f %d'%(t,bits[i]))
+    p.text(t,offset,'%d'%(bits[i]))
     if 128 == weight :
-        p.text(t - 4,(offset + 2*depth)/1e3,'%02x'%(octet))
+        p.text(t - 4,(offset + 2*depth),'%02x'%(octet))
         octet = 0
 p.set_xlabel('time (us)')
 p.set_ylabel('frequency deviation (kHz)')

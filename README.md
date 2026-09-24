@@ -55,10 +55,8 @@ Selecting from the top of first `1` to bottom of fourth `0`
 
 ![preamble2](images/preamble2.png)
 
-FFT broke decoding ... current bookmark
-```
-python3 ~/src/HackRF/analyze.py --iq 2404cstest-0x0401-20MHz.iq --N 9 --f-sample=20000000 --modulation=974499,975604 --preamble=1048567
-```
+Closing this graph opens a decoded graph of the CS SYNC packet
+![decode1](images/decode1.png)
 
 ### Example FFT
 ```
