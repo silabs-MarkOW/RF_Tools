@@ -26,3 +26,42 @@ Currently can display frequency spectra of selected region or decoding of Blueto
 Work flow:  Initially plots amplitude of entire file.  Selecting a region (zoom) will pass the range selected to the next stage when graph is closed.  After selecting range in amplitude view, range is plotted as modulation, with darkness of point corresponding to amplitude. After modulation graph is closed, either spectra is plotted (`--FFT`) or default is to decode as 1M PHY.  In decode mode, additional modulation graph is displayed, a symmetric selection of preamble should be selected (for example if `10101010` is preamble, select from peak of first `1` to bottom of last `0`.  This region us used to sync start of symbols.
 
 The various plots can be skipped by providing sample indexes in `left,right` format to `--amp`, `--phase` (this name probably will change) and `--preamble`.
+
+### Example Decoding
+```
+python3 analyze.py --iq 2404cstest-0x0401-20MHz.iq --N 9 --f-sample=20000000
+```
+Amplitude graph is displayed
+![[images/amp1.png]]
+
+Selecting a single CS subevent (NCP Host is repeatedly calling `sl_bt_cs_test_start()`).  First packet is the CS SYNC, second is Stable Phase tone.
+![[images/amp2.png]]
+
+Closing amplitude window, modulation view of zoom region opens.
+![[images/modulation1.png]]
+
+Zooming in on CS SYNC packet
+![[images/modulation2.png]]
+
+This will be the region to be decoded.  Closing the window, the same region is graphed again.  The exercise here is to select the preamble.  Zooming in on first 20 us, the preamble can be recognized as `10101010`.
+![[images/preamble1.png]]
+
+Selecting from the top of first `1` to bottom of fourth `0`
+![[images/preamble2.png]]
+
+FFT broke decoding ... current bookmark
+```
+python3 ~/src/HackRF/analyze.py --iq 2404cstest-0x0401-20MHz.iq --N 9 --f-sample=20000000 --modulation=974499,975604 --preamble=1048567
+```
+
+### Example FFT
+```
+python3 ~/src/HackRF/analyze.py --iq 2404cstest-0x0401-20MHz.iq --N 9 --f-sample=20000000 --amp=974444,995659 --fft
+```
+
+Selecting range /inside/ Stable Modulation tone packet
+![[images/modulation3.png]]
+
+Closing window, opens frequency spectra ofselected region:
+![[images/fft1.png]]
+![[images/fft2.png]]

@@ -27,6 +27,8 @@ class Plot :
         self.ax.set_xlabel(label)
     def set_ylabel(self, label) :
         self.ax.set_ylabel(label)
+    def text(self,x,y,str) :
+        self.ax.text(x,y,str,ha='center')
     def show(self) :
         self.xLimits = plt.xlim()
         plt.show()
@@ -34,13 +36,10 @@ class Plot :
 p = argparse.ArgumentParser()
 p.add_argument('--iq',required=True)
 p.add_argument('--f-sample',type=float,required=True)
-p.add_argument('--amp')
-p.add_argument('--phase')
-p.add_argument('--sine',action='store_true')
+p.add_argument('--amp',help='left,right bounds to skip amplitude graph')
+p.add_argument('--modulation',help='left,right bounds to skip modulation graph')
+p.add_argument('--preamble',help='left,right bounds to skip preamble graph')
 p.add_argument('--fft',action='store_true')
-p.add_argument('--left')
-p.add_argument('--right')
-p.add_argument('--preamble')
 p.add_argument('--N',type=int,default=1)
 
 args = p.parse_args()
@@ -66,7 +65,7 @@ dangle = numpy.angle(samples[args.N:]*numpy.conj(samples[:-args.N]))/args.N
 seconds = numpy.linspace(0,len(dangle)/args.f_sample,len(dangle))
 kHz = dangle * args.f_sample / 2e3 / numpy.pi
 
-if None == args.phase :
+if None == args.modulation :
     if None == args.amp :
         ms = numpy.linspace(0,1e6*len(amp)/args.f_sample,len(amp))
         p = Plot()
@@ -96,9 +95,9 @@ if None == args.phase :
     L,R = p.xlim()
     L = (ms < L).sum()
     R = (ms <= R).sum()
-    print('--phase=%d,%d'%(L,R))
+    print('--modulation=%d,%d'%(L,R))
 else :
-    t = args.phase.split(',')
+    t = args.modulation.split(',')
     L = int(t[0])
     R = int(t[1])
 
@@ -123,6 +122,69 @@ if args.fft :
     print('A: %f\nmean: %f'%(A,mean))
     quit()
     
+if None == args.preamble :
+    camp = numpy.zeros((R-L))
+    for i in range(args.N) :
+        j = i - (args.N >> 1)
+        camp += amp[L+j:R+j]
+    camp /= args.N
+    us = seconds*1e6
+    p = Plot()
+    p.scatter(us[L:R]-Lus, kHz[L:R], camp)
+    p.set_xlabel('time (us)')
+    p.set_ylabel('frequency deviation (kHz)')
+    p.show()
+    Lp,Rp = p.xlim()
+    Lp = int(us[L] + (us < Lp).sum())
+    Rp = int(us[L] + (us >= Rp).sum())
+    mid = (Lp+Rp)>>1
+    Lp = int(mid - 4e-6*args.f_sample)
+    print('auto:\n--preamble=%d'%(Lp))
+else :
+    Lp = int(args.preamble)
+Rp = int(Lp + 8e-6*args.f_sample)
+print('Lp,Rp',Lp,Rp)
+preamble = kHz[Lp:Rp]
+sine = numpy.sin(numpy.pi*seconds[Lp:Rp])
+cosine = numpy.cos(numpy.pi*seconds[Lp:Rp])
+c_sine = (sine*preamble).mean()
+c_cosine = (cosine*preamble).mean()
+components = c_sine - 1.j*c_cosine
+phase = numpy.angle(components)
+offset = preamble.mean()
+depth = 2*numpy.abs(components)
+print('phase,offset,depth',phase,offset,depth)
+print('L,R,R-L,L/20',L,R,R-L,L/20)
+L = int(20*numpy.round(L/20))
+L -= int(numpy.round(20*phase/2/numpy.pi))
+symbols = (R - L) // 20
+print('L,symbols',L,symbols)
+folded = kHz[L:L+20*symbols].reshape((symbols,20))-offset
+bits = folded.mean(axis=1)>0
+
+#quit()
+camp = numpy.zeros((R-L))
+for i in range(args.N) :
+    j = i - (args.N >> 1)
+    camp += amp[L+j:R+j]
+camp /= args.N
+p = Plot()
+p.scatter(seconds[L:R]*1e6, kHz[L:R], camp)
+octet = 0
+for i in range(len(bits)) :
+    t = L/args.f_sample*1e6 + i + .5
+    weight = 1 << (i % 8)
+    if bits[i] :
+        octet += weight
+    print('%f %d'%(t,bits[i]))
+    p.text(t,offset/1e3,'%d'%(bits[i]))
+    if 128 == weight :
+        p.text(t - 4,(offset + 2*depth)/1e3,'%02x'%(octet))
+        octet = 0
+p.set_xlabel('time (us)')
+p.set_ylabel('frequency deviation (kHz)')
+p.show()
+quit()
 
 count,edges = numpy.histogram(amp,100)
 
@@ -166,59 +228,6 @@ for i in range(args.N) :
 mamp /= args.N
 us = numpy.linspace(0,length/args.f_sample*1e6,length)
                
-if None == args.preamble :
-    fig,ax = plt.subplots()
-    cid = fig.canvas.mpl_connect('button_release_event', on_release)
-    ax.scatter(us, modulation/1e3, c = mamp , cmap = "Greys")
-    ax.set_xlabel('time (us)')
-    ax.set_ylabel('frequency deviation (kHz)')
-    if args.sine :
-        ax.plot(us, numpy.cos(us*2*numpy.pi/2)*300-150)
-    plt.show()
-    L = (us < xLimits[0]).nonzero()[0][-1]
-    R = (us > xLimits[1]).nonzero()[0][0]
-    mid = (L+R)>>1
-    L = int(mid - 4e-6*args.f_sample)
-    print('auto:\n--preamble=%d'%(L))
-else :
-    L = int(args.preamble)
-R = int(L + 8e-6*args.f_sample)
-preamble = modulation[L:R]
-sine = numpy.sin(numpy.pi*us[L:R])
-cosine = numpy.cos(numpy.pi*us[L:R])
-c_sine = (sine*preamble).mean()
-c_cosine = (cosine*preamble).mean()
-components = c_sine - 1.j*c_cosine
-phase = numpy.angle(components)
-offset = preamble.mean()
-depth = 2*numpy.abs(components)
-print(phase,offset,depth)
-print(L,R,R-L,L/20)
-L = int(20*numpy.round(L/20))
-L -= int(numpy.round(20*phase/2/numpy.pi))
-symbols = (length - L) // 20
-print(L,symbols)
-folded = modulation[L:L+20*symbols].reshape((symbols,20))-offset
-bits = folded.mean(axis=1)>0
-
-#quit()
-fig,ax = plt.subplots()
-ax.scatter(us, modulation/1e3, c = mamp, s=9 , cmap = "Greys")
-#ax.plot(us,(offset+depth*numpy.sin(numpy.pi*us-phase))/1e3)
-octet = 0
-for i in range(len(bits)) :
-    t = L/args.f_sample*1e6 + i + .5
-    weight = 1 << (i % 8)
-    if bits[i] :
-        octet += weight
-    #print('%f %d'%(t,bits[i]))
-    ax.text(t,offset/1e3,'%d'%(bits[i]),ha='center')
-    if 128 == weight :
-        ax.text(t - 4,(offset + 2*depth)/1e3,'%02x'%(octet))
-        octet = 0
-ax.set_xlabel('time (us)')
-ax.set_ylabel('frequency deviation (kHz)')
-plt.show()
 
 quit()
 if(args.amp) :
